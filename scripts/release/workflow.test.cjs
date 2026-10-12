@@ -31,6 +31,8 @@ test('发布构建仅使用本次运行的临时 Yarn 缓存，不跨运行恢�
   const { build, publish } = workflow.jobs;
   for (const job of Object.values(workflow.jobs)) {
     assert.ok(!job.steps.some(s => s.uses?.startsWith('actions/cache') || s.with?.cache), '发布工作流不得恢复或保存跨运行依赖缓存');
+    const setupNode = job.steps.find(s => s.uses?.startsWith('actions/setup-node@'));
+    assert.equal(setupNode.with['package-manager-cache'], false, '必须明确关闭 setup-node 的自动依赖缓存');
   }
   const install = build.steps.find(s => s.run === 'node scripts/release/ci.cjs install');
   assert.match(install.env?.YARN_CACHE_FOLDER, /^\$\{\{ runner\.temp \}\}\/[^/]+$/);
