@@ -40,5 +40,6 @@ async function main(args) {
   fs.writeFileSync(statePath, JSON.stringify({ ...state, ...result }));
   console.log(`CI：${result.url}\n失败补发：y pub --retry ${result.runId}`);
   watchRun(result.runId);
+  console.log(release.manifest.packages.map(e => `+ ${e.name}@${e.version}`).join('\n'));
 }
 main(process.argv.slice(2)).catch(e => { console.error(`发布停止：${e.message}`); process.exitCode = 1; });
