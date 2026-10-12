@@ -1,12 +1,10 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { setTimeout: delay } = require('node:timers/promises');
 const { validateManifest, check, REGISTRY, TAG } = require('./policy.cjs');
 const { integrity, inspectArchive } = require('./archive.cjs');
 const { getPublished } = require('./registry.cjs');
-const { run, npmEnvironment } = require('./runtime.cjs');
-const CONFIRM_TIMEOUT_MS = 5 * 60 * 1000;
-const CONFIRM_INTERVAL_MS = 20 * 1000;
+const { runAsync, npmEnvironment } = require('./runtime.cjs');
+const PUBLISH_CONCURRENCY = 3;
 function verifiedArtifacts(artifactDir, manifest, context) {
   validateManifest(manifest);
   const file = path.join(artifactDir, 'artifact.json');
@@ -16,7 +14,8 @@ function verifiedArtifacts(artifactDir, manifest, context) {
   check(/^\d+$/.test(artifact.runAttempt) && Number(artifact.runAttempt) <= Number(context.runAttempt), '产物运行轮次无效');
   check(JSON.stringify(artifact.manifest) === JSON.stringify(manifest), '产物内发布清单与原提交不一致');
   check(Array.isArray(artifact.packages) && artifact.packages.length === manifest.packages.length, '产物包数量不符');
-  const seen = new Set();
+  const seen = new Set(), packages = [];
+  const names = new Set(manifest.packages.map(e => e.name));
   for (const item of artifact.packages) {
     const e = manifest.packages.find(e => e.name === item.name);
     check(e && e.version === item.version && e.path === item.path && !seen.has(e.name), '产物包清单不符');
@@ -25,48 +24,35 @@ function verifiedArtifacts(artifactDir, manifest, context) {
     const tarball = path.join(artifactDir, item.filename);
     check(fs.lstatSync(tarball).isFile(), 'tarball 必须是普通文件');
     check(item.integrity === integrity(tarball), `${e.name}: 产物摘要不匹配`);
-    inspectArchive(tarball, e);
+    const pkg = inspectArchive(tarball, e);
+    // Read dependencies from the verified tarball, not untrusted artifact fields.
+    // Peer dependencies can form legitimate cycles (a-icons <-> assui).
+    const dependencies = Object.keys({ ...pkg.dependencies, ...pkg.optionalDependencies }).filter(name => names.has(name));
+    packages.push({ ...item, dependencies });
   }
-  return artifact.packages;
+  const byName = new Map(packages.map(e => [e.name, e]));
+  const visiting = new Set(), visited = new Set();
+  function visit(name) {
+    if (visited.has(name)) return;
+    check(!visiting.has(name), `运行时内部依赖循环: ${name}`);
+    visiting.add(name);
+    for (const dep of byName.get(name).dependencies) visit(dep);
+    visiting.delete(name); visited.add(name);
+  }
+  for (const e of packages) visit(e.name);
+  return packages;
 }
-function npmUpload(file) {
+async function npmUpload(file) {
   check(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN, '真实上传只能在 OIDC 工作流内执行');
   check(!process.env.NPM_TOKEN && !process.env.NODE_AUTH_TOKEN, '不接受长期 npm token');
   const config = npmEnvironment();
-  try { run('npm', ['publish', file, '--ignore-scripts', `--registry=${REGISTRY}`, `--tag=${TAG}`, '--access=public', '--provenance'], { cwd: config.dir, env: config.env, inherit: true }); }
+  try { await runAsync('npm', ['publish', file, '--ignore-scripts', `--registry=${REGISTRY}`, `--tag=${TAG}`, '--access=public', '--provenance'], { cwd: config.dir, env: config.env }); }
   finally { config.cleanup(); }
 }
-async function confirmPublished(entry, { lookup, sleep, now, log }, uploadError) {
-  const label = `${entry.name}@${entry.version}`;
-  const started = now(), deadline = started + CONFIRM_TIMEOUT_MS;
-  while (true) {
-    const requestBudget = deadline - now();
-    if (requestBudget <= 0) break;
-    let remote;
-    try {
-      // Include request time in the deadline, including the final request.
-      remote = await lookup(entry.name, entry.version, { timeoutMs: Math.min(30000, Math.ceil(requestBudget)) });
-    } catch (error) {
-      if (error.name === 'TimeoutError' && now() >= deadline) break;
-      throw error;
-    }
-    if (remote) {
-      check(remote.integrity === entry.integrity, `${label}: 已发布版本内容冲突或缺少摘要`);
-      log(`${label}: npm 版本及摘要确认通过（等待 ${Math.ceil((now() - started) / 1000)} 秒）`);
-      return;
-    }
-    const remaining = deadline - now();
-    if (remaining <= 0) break;
-    const interval = Math.min(CONFIRM_INTERVAL_MS, remaining);
-    log(`${label}: npm 暂未可见，${Math.ceil(interval / 1000)} 秒后再次确认（剩余 ${Math.ceil(remaining / 1000)} 秒）；不会重复上传`);
-    await sleep(interval);
-  }
-  const detail = uploadError ? `；上传命令返回：${uploadError.message}` : '';
-  throw new Error(`${label}: 上传后等待确认超时（最多 5 分钟）${detail}。已停止；确认 npm 状态后可手动重跑原任务，无需重新升版`, { cause: uploadError });
-}
-async function publishRelease({ artifactDir, manifest, context, lookup = getPublished, upload = npmUpload, dryRun = false, sleep = delay, now = () => performance.now(), log = console.log }) {
+async function publishRelease({ artifactDir, manifest, context, lookup = getPublished, upload = npmUpload, dryRun = false, log = console.log }) {
   const packages = verifiedArtifacts(artifactDir, manifest, context);
-  const results = [];
+  const statuses = new Map();
+  const results = () => packages.map(e => ({ name: e.name, version: e.version, status: statuses.get(e.name) || 'not-uploaded' }));
   try {
     // Check every collision before starting any new upload.
     const existing = new Map();
@@ -75,18 +61,53 @@ async function publishRelease({ artifactDir, manifest, context, lookup = getPubl
       if (remote) check(remote.integrity === e.integrity, `${e.name}@${e.version}: 已发布版本内容冲突或缺少摘要`);
       existing.set(e.name, remote);
     }
-    for (const e of packages) {
-      if (existing.get(e.name)) { results.push({ name: e.name, version: e.version, status: 'skipped' }); continue; }
-      if (dryRun) { results.push({ name: e.name, version: e.version, status: 'would-publish' }); continue; }
-      let error;
-      try { await upload(path.join(artifactDir, e.filename), e); } catch (e) { error = e; }
-      await confirmPublished(e, { lookup, sleep, now, log }, error);
-      results.push({ name: e.name, version: e.version, status: 'published' });
+    for (const e of packages) if (existing.get(e.name)) statuses.set(e.name, 'skipped');
+    if (dryRun) {
+      for (const e of packages) if (!statuses.has(e.name)) statuses.set(e.name, 'would-publish');
+      return results();
     }
-    return results;
+    const pending = packages.filter(e => !statuses.has(e.name));
+    const running = new Map();
+    let failure;
+    async function publishOne(e) {
+      const label = `${e.name}@${e.version}`;
+      log(`${label}: 开始上传；最多 ${PUBLISH_CONCURRENCY} 个包同时上传`);
+      try {
+        await upload(path.join(artifactDir, e.filename), e);
+      } catch (uploadError) {
+        // A lost response may hide a successful upload. Check once, never poll or re-upload.
+        try {
+          const remote = await lookup(e.name, e.version);
+          check(remote, 'npm 暂未查到该版本，上传结果尚不明确');
+          check(remote.integrity === e.integrity, '已发布版本内容冲突或缺少摘要');
+          log(`${label}: 上传命令报错，但已核实 npm 同版本及摘要一致`);
+        } catch (verificationError) {
+          throw new Error(`${label}: 上传命令报错（${uploadError.message}）；${verificationError.message}。不会自动重复上传；请核实 npm 状态后手动重跑原任务`, { cause: uploadError });
+        }
+      }
+      statuses.set(e.name, 'uploaded');
+      log(`${label}: 上传成功；npm 可能仍在处理，新版本暂时无法安装属于正常情况`);
+    }
+    while (pending.length || running.size) {
+      while (!failure && running.size < PUBLISH_CONCURRENCY) {
+        const index = pending.findIndex(e => e.dependencies.every(dep => statuses.has(dep)));
+        if (index < 0) break;
+        const [entry] = pending.splice(index, 1);
+        const task = publishOne(entry).catch(error => {
+          statuses.set(entry.name, 'upload-unconfirmed');
+          failure ||= error;
+          log(`${entry.name}@${entry.version}: ${error.message}；停止启动新包，等待已启动的上传结束`);
+        }).finally(() => running.delete(entry.name));
+        running.set(entry.name, task);
+      }
+      if (!running.size) break;
+      await Promise.race(running.values());
+    }
+    if (failure) throw failure;
+    check(!pending.length, '存在未满足的内部依赖，停止发布');
+    return results();
   } catch (error) {
-    const completed = new Set(results.map(r => r.name));
-    error.results = [...results, ...packages.filter(e => !completed.has(e.name)).map(e => ({ name: e.name, version: e.version, status: 'not-confirmed' }))];
+    error.results = results();
     throw error;
   }
 }
