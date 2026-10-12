@@ -26,6 +26,8 @@ function report(results = []) {
   const lines = ['| 包 | 版本 | 状态 |', '|---|---|---|', ...results.map(r => `| ${r.name} | ${r.version} | ${r.status} |`)];
   console.log(lines.join('\n'));
   if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${lines.join('\n')}\n`);
+  const uploaded = results.filter(r => r.status === 'uploaded');
+  if (uploaded.length) console.log(uploaded.map(r => `+ ${r.name}@${r.version}`).join('\n'));
 }
 function installDependencies(root, execute = run) {
   const locks = ['yarn.lock', ...PACKAGES.map(name => `packages/${name}/yarn.lock`)];
