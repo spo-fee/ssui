@@ -3,8 +3,7 @@ const path = require('node:path');
 const { validateManifest, check, REGISTRY, TAG } = require('./policy.cjs');
 const { integrity, inspectArchive } = require('./archive.cjs');
 const { getPublished } = require('./registry.cjs');
-const { runAsync, npmEnvironment } = require('./runtime.cjs');
-const PUBLISH_CONCURRENCY = 3;
+const { run, npmEnvironment } = require('./runtime.cjs');
 function verifiedArtifacts(artifactDir, manifest, context) {
   validateManifest(manifest);
   const file = path.join(artifactDir, 'artifact.json');
@@ -31,22 +30,22 @@ function verifiedArtifacts(artifactDir, manifest, context) {
     packages.push({ ...item, dependencies });
   }
   const byName = new Map(packages.map(e => [e.name, e]));
-  const visiting = new Set(), visited = new Set();
+  const visiting = new Set(), visited = new Set(), ordered = [];
   function visit(name) {
     if (visited.has(name)) return;
     check(!visiting.has(name), `运行时内部依赖循环: ${name}`);
     visiting.add(name);
     for (const dep of byName.get(name).dependencies) visit(dep);
-    visiting.delete(name); visited.add(name);
+    visiting.delete(name); visited.add(name); ordered.push(byName.get(name));
   }
   for (const e of packages) visit(e.name);
-  return packages;
+  return ordered;
 }
-async function npmUpload(file) {
+function npmUpload(file) {
   check(process.env.ACTIONS_ID_TOKEN_REQUEST_URL && process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN, '真实上传只能在 OIDC 工作流内执行');
   check(!process.env.NPM_TOKEN && !process.env.NODE_AUTH_TOKEN, '不接受长期 npm token');
   const config = npmEnvironment();
-  try { await runAsync('npm', ['publish', file, '--ignore-scripts', `--registry=${REGISTRY}`, `--tag=${TAG}`, '--access=public', '--provenance'], { cwd: config.dir, env: config.env }); }
+  try { run('npm', ['publish', file, '--ignore-scripts', `--registry=${REGISTRY}`, `--tag=${TAG}`, '--access=public', '--provenance'], { cwd: config.dir, env: config.env, inherit: true }); }
   finally { config.cleanup(); }
 }
 async function publishRelease({ artifactDir, manifest, context, lookup = getPublished, upload = npmUpload, dryRun = false, log = console.log }) {
@@ -66,12 +65,10 @@ async function publishRelease({ artifactDir, manifest, context, lookup = getPubl
       for (const e of packages) if (!statuses.has(e.name)) statuses.set(e.name, 'would-publish');
       return results();
     }
-    const pending = packages.filter(e => !statuses.has(e.name));
-    const running = new Map();
-    let failure;
-    async function publishOne(e) {
+    for (const e of packages) {
+      if (statuses.has(e.name)) continue;
       const label = `${e.name}@${e.version}`;
-      log(`${label}: 开始上传；最多 ${PUBLISH_CONCURRENCY} 个包同时上传`);
+      log(`${label}: 开始上传`);
       try {
         await upload(path.join(artifactDir, e.filename), e);
       } catch (uploadError) {
@@ -82,29 +79,13 @@ async function publishRelease({ artifactDir, manifest, context, lookup = getPubl
           check(remote.integrity === e.integrity, '已发布版本内容冲突或缺少摘要');
           log(`${label}: 上传命令报错，但已核实 npm 同版本及摘要一致`);
         } catch (verificationError) {
-          throw new Error(`${label}: 上传命令报错（${uploadError.message}）；${verificationError.message}。不会自动重复上传；请核实 npm 状态后手动重跑原任务`, { cause: uploadError });
+          statuses.set(e.name, 'upload-unconfirmed');
+          throw new Error(`${label}: 上传命令报错（${uploadError.message}）；${verificationError.message}。停止后续上传，不会自动重复上传；请核实 npm 状态后手动重跑原任务`, { cause: uploadError });
         }
       }
       statuses.set(e.name, 'uploaded');
       log(`${label}: 上传成功；npm 可能仍在处理，新版本暂时无法安装属于正常情况`);
     }
-    while (pending.length || running.size) {
-      while (!failure && running.size < PUBLISH_CONCURRENCY) {
-        const index = pending.findIndex(e => e.dependencies.every(dep => statuses.has(dep)));
-        if (index < 0) break;
-        const [entry] = pending.splice(index, 1);
-        const task = publishOne(entry).catch(error => {
-          statuses.set(entry.name, 'upload-unconfirmed');
-          failure ||= error;
-          log(`${entry.name}@${entry.version}: ${error.message}；停止启动新包，等待已启动的上传结束`);
-        }).finally(() => running.delete(entry.name));
-        running.set(entry.name, task);
-      }
-      if (!running.size) break;
-      await Promise.race(running.values());
-    }
-    if (failure) throw failure;
-    check(!pending.length, '存在未满足的内部依赖，停止发布');
     return results();
   } catch (error) {
     error.results = results();

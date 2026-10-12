@@ -27,21 +27,9 @@ function fixture(t, names = ['a-base-icon', 'a-icons'], edges = dependencies) {
 function clock() {
   let elapsed = 0;
   const sleeps = [];
-  const timers = [];
-  let ticking = false;
-  const tick = () => {
-    if (ticking || !timers.length) return;
-    ticking = true;
-    setImmediate(() => {
-      ticking = false;
-      elapsed = Math.max(elapsed, Math.min(...timers.map(t => t.at)));
-      for (let i = timers.length - 1; i >= 0; i--) if (timers[i].at <= elapsed) timers.splice(i, 1)[0].resolve();
-      tick();
-    });
-  };
   return {
     now: () => elapsed,
-    sleep: ms => new Promise(resolve => { sleeps.push(ms); timers.push({ at: elapsed + ms, resolve }); tick(); }),
+    sleep: async ms => { sleeps.push(ms); elapsed += ms; },
     log: () => {},
     sleeps,
   };
@@ -155,50 +143,54 @@ test('上传报错且一次查询无法核实时失败，不轮询、不重复�
   }
 });
 
-test('无依赖包最多三个同时上传，上传完成后空位立即复用', async t => {
-  const names = ['a-base-icon', 'a-icons', 'ec-common', 'aa-utils', 'amssui', 'assui'];
+test('即使包之间没有依赖，也必须等待前一个上传结束再上传下一个', async t => {
+  const names = ['a-base-icon', 'a-icons', 'ec-common', 'aa-utils'];
   const f = fixture(t, names, {}); await packRelease({ ...f, context });
-  const time = clock();
+  const events = [];
   let active = 0, maximum = 0;
-  const results = await publishRelease({ artifactDir: f.outDir, manifest: f.manifest, context, ...time,
-    upload: async () => {
+  const results = await publishRelease({ artifactDir: f.outDir, manifest: f.manifest, context,
+    upload: async (file, entry) => {
       maximum = Math.max(maximum, ++active);
-      await time.sleep(20000);
+      events.push(`start:${entry.name}`);
+      await new Promise(setImmediate);
+      events.push(`end:${entry.name}`);
       active--;
     },
     lookup: async () => null,
   });
-  assert.equal(maximum, 3);
+  assert.equal(maximum, 1);
   assert.equal(active, 0);
-  assert.equal(time.now(), 40000);
-  assert.deepEqual(results.map(r => r.status), Array(6).fill('uploaded'));
+  assert.deepEqual(events, [
+    'start:a-base-icon', 'end:a-base-icon', 'start:a-icons', 'end:a-icons',
+    'start:ec-common', 'end:ec-common', 'start:aa-utils', 'end:aa-utils',
+  ]);
+  assert.deepEqual(results.map(r => r.status), Array(4).fill('uploaded'));
 });
 
-test('并发失败停止新上传，但等待已启动上传结束，补发跳过成功包', async t => {
+test('A、B 成功而 C 失败时 D 不会上传；原任务补发跳过可查询的 A、B', async t => {
   const names = ['a-base-icon', 'a-icons', 'ec-common', 'aa-utils'];
   const f = fixture(t, names, {}); await packRelease({ ...f, context });
-  const time = clock(), uploaded = new Map(), uploads = [];
+  const uploaded = new Map(), uploads = [];
   let fail = true;
   const upload = async (file, entry) => {
     uploads.push(entry.name);
-    await time.sleep({ 'a-base-icon': 20000, 'a-icons': 40000, 'ec-common': 60000, 'aa-utils': 20000 }[entry.name]);
-    if (entry.name === 'a-base-icon' && fail) throw new Error('upload failed');
+    await new Promise(setImmediate);
+    if (entry.name === 'ec-common' && fail) throw new Error('upload failed');
     uploaded.set(entry.name, { integrity: entry.integrity });
   };
-  const options = { artifactDir: f.outDir, manifest: f.manifest, context, ...time, upload,
+  const options = { artifactDir: f.outDir, manifest: f.manifest, context, upload,
     lookup: async name => uploaded.get(name) || null,
   };
   await assert.rejects(publishRelease(options), error => {
     assert.match(error.message, /upload failed/);
-    assert.deepEqual(error.results.map(r => r.status), ['upload-unconfirmed', 'uploaded', 'uploaded', 'not-uploaded']);
+    assert.deepEqual(error.results.map(r => r.status), ['uploaded', 'uploaded', 'upload-unconfirmed', 'not-uploaded']);
     return true;
   });
   assert.deepEqual(uploads, ['a-base-icon', 'a-icons', 'ec-common']);
-  assert.equal(time.now(), 60000);
   fail = false;
   const retried = await publishRelease({ ...options, context: { ...context, runAttempt: '2' } });
-  assert.deepEqual(retried.map(r => r.status), ['uploaded', 'skipped', 'skipped', 'uploaded']);
-  assert.deepEqual(uploads, ['a-base-icon', 'a-icons', 'ec-common', 'a-base-icon', 'aa-utils']);
+  assert.deepEqual(retried.map(r => r.status), ['skipped', 'skipped', 'uploaded', 'uploaded']);
+  assert.deepEqual(uploads, ['a-base-icon', 'a-icons', 'ec-common', 'ec-common', 'aa-utils']);
 });
 
 test('依赖来自已校验 tarball，忽略 artifact 伪造依赖；已存在版本可立即解锁下游', async t => {
@@ -224,7 +216,7 @@ test('依赖来自已校验 tarball，忽略 artifact 伪造依赖；已存在�
     lookup: async name => registry.get(name) || null,
   });
   assert.deepEqual(uploads, ['a-icons']);
-  assert.deepEqual(retried.map(r => r.status), ['uploaded', 'skipped']);
+  assert.deepEqual(retried.map(r => [r.name, r.status]), [['a-base-icon', 'skipped'], ['a-icons', 'uploaded']]);
 });
 
 test('可选依赖上传成功即可继续，无需等待可见；peer 循环不会阻塞，dry run 不上传', async t => {

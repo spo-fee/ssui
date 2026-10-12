@@ -1,4 +1,4 @@
-const { spawn, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,16 +9,6 @@ function run(command, args, options = {}) {
   if (result.status !== 0) throw new Error(`${command} 执行失败 (${result.status})\n${result.stderr || result.stdout || ''}`);
   return (result.stdout || '').trim();
 }
-function runAsync(command, args, { cwd, env = process.env } = {}) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd, env, stdio: 'inherit' });
-    child.once('error', error => reject(new Error(`${command}: ${error.message}`)));
-    child.once('close', (code, signal) => {
-      if (code === 0) resolve();
-      else reject(new Error(`${command} 执行失败 (${signal || code})`));
-    });
-  });
-}
 function npmEnvironment() {
   const env = { ...process.env };
   for (const k of Object.keys(env)) if (/^npm_config_/i.test(k) || /^(NODE_AUTH_TOKEN|NPM_TOKEN)$/i.test(k)) delete env[k];
@@ -27,4 +17,4 @@ function npmEnvironment() {
   Object.assign(env, { NPM_CONFIG_USERCONFIG: path.join(dir, 'npmrc'), NPM_CONFIG_GLOBALCONFIG: path.join(dir, 'globalrc'), NPM_CONFIG_CACHE: path.join(os.tmpdir(), 'ssui-npm-cache'), NPM_CONFIG_IGNORE_SCRIPTS: 'true' });
   return { dir, env, cleanup: () => fs.rmSync(dir, { recursive: true, force: true }) };
 }
-module.exports = { run, runAsync, npmEnvironment };
+module.exports = { run, npmEnvironment };
