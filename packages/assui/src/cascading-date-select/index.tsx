@@ -23,6 +23,7 @@ export interface CascadingDateSelectProps {
   disabled?: boolean;
   className?: string;
   style?: CSSProperties;
+  onBlur?: SelectProps<number>['onBlur'];
 }
 
 const CascadingDateSelect = ({
@@ -35,6 +36,7 @@ const CascadingDateSelect = ({
   disabled,
   className,
   style,
+  onBlur,
 }: CascadingDateSelectProps) => {
   const [searchValues, setSearchValues] = useState<Record<DatePart, string>>({
     year: '',
@@ -46,6 +48,22 @@ const CascadingDateSelect = ({
     maxDate,
     onChange,
   });
+
+  const handleSearch = (key: DatePart) => (input: string) => {
+    // 普通 Select 的搜索框不支持 maxLength，统一处理输入和粘贴的非数字及超长内容。
+    const search = input.replace(/\D/g, '').slice(0, key === DATE_PART.year ? 4 : 2);
+    setSearchValues((previous) => ({ ...previous, [key]: search }));
+  };
+
+  const handleDropdownVisibleChange = (key: DatePart) => (open: boolean) => {
+    if (!open) {
+      setSearchValues((previous) => ({ ...previous, [key]: '' }));
+    }
+  };
+
+  const handleSelectChange = (key: DatePart) => (selected: number) => {
+    handleChange(key, selected);
+  };
 
   return (
     <div className={classNames('cascading-date-select', className)} style={style}>
@@ -62,23 +80,12 @@ const CascadingDateSelect = ({
             options={options[key]}
             showSearch
             searchValue={searchValues[key]}
-            onSearch={(input) => {
-              // 普通 Select 的搜索框不支持 maxLength，统一处理输入和粘贴的非数字及超长内容。
-              const search = input
-                .replace(/\D/g, '')
-                .slice(0, key === DATE_PART.year ? 4 : 2);
-              setSearchValues((previous) => ({ ...previous, [key]: search }));
-            }}
-            onDropdownVisibleChange={(open) => {
-              if (!open) {
-                setSearchValues((previous) => ({ ...previous, [key]: '' }));
-              }
-            }}
+            onSearch={handleSearch(key)}
+            onDropdownVisibleChange={handleDropdownVisibleChange(key)}
             filterOption={filterDateOption}
             notFoundContent={notFoundContent}
-            onChange={(selected) => {
-              handleChange(key, selected);
-            }}
+            onChange={handleSelectChange(key)}
+            onBlur={onBlur}
           />
         );
       })}
