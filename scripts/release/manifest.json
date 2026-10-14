@@ -1,44 +1,14 @@
 {
   "schemaVersion": 1,
   "branch": "dev",
-  "baseSha": "a7da258cd23096667a055994a6754edcda8bfa18",
+  "baseSha": "653564bf5a4cc6efb709690d6ef4d90ab70efd24",
   "tag": "latest",
   "packages": [
     {
-      "name": "a-base-icon",
-      "path": "packages/a-base-icon",
-      "oldVersion": "1.1.4",
-      "version": "1.1.5"
-    },
-    {
-      "name": "a-icons",
-      "path": "packages/a-icons",
-      "oldVersion": "1.2.85",
-      "version": "1.2.86"
-    },
-    {
-      "name": "aa-utils",
-      "path": "packages/aa-utils",
-      "oldVersion": "2.1.38",
-      "version": "2.1.39"
-    },
-    {
-      "name": "amssui",
-      "path": "packages/amssui",
-      "oldVersion": "2.0.86",
-      "version": "2.0.87"
-    },
-    {
       "name": "assui",
       "path": "packages/assui",
-      "oldVersion": "3.3.31",
-      "version": "3.3.32"
-    },
-    {
-      "name": "ec-common",
-      "path": "packages/ec-common",
-      "oldVersion": "1.1.42",
-      "version": "1.1.43"
+      "oldVersion": "3.3.32",
+      "version": "3.3.33"
     }
   ]
 }
