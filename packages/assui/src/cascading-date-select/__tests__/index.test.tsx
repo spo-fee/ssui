@@ -146,13 +146,14 @@ describe('CascadingDateSelect 表单与搜索', () => {
     await user.click(input);
     await user.type(input, '30');
     await user.click(getByText('30', { selector: '.ant-select-item-option-content' }));
-    expect(input.value).toBe('');
-    expect(getByText('30', { selector: '.ant-select-selection-item' })).toBeTruthy();
+    await waitFor(() => expect(input.value).toBe(''));
+    // antd v6 的单选值显示在 content 中，限定容器以避开下拉选项和读屏提示。
+    expect(getByText('30', { selector: '.ant-select-content' })).toBeTruthy();
 
     await user.click(input);
     await user.type(input, '2');
     await user.tab();
     await waitFor(() => expect(input.value).toBe(''));
-    expect(getByText('30', { selector: '.ant-select-selection-item' })).toBeTruthy();
+    expect(getByText('30', { selector: '.ant-select-content' })).toBeTruthy();
   });
 });
