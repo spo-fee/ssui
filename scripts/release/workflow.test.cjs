@@ -27,16 +27,28 @@ test('构建没有发布权限；上传只取原 artifact，且每轮重新验�
   assert.ok(!publish.steps.some(s => /yarn|lerna|npm (?:ci|install(?! --global))|ci\.cjs (?:install|pack)/.test(s.run || '')));
 });
 
-test('发布构建仅使用本次运行的临时 Yarn 缓存，不跨运行恢复或保存依赖', () => {
+test('构建只缓存 Yarn 下载文件，缓存命中也不跳过安装；发布任务不读依赖缓存', () => {
   const { build, publish } = workflow.jobs;
-  for (const job of Object.values(workflow.jobs)) {
-    assert.ok(!job.steps.some(s => s.uses?.startsWith('actions/cache') || s.with?.cache), '发布工作流不得恢复或保存跨运行依赖缓存');
-    const setupNode = job.steps.find(s => s.uses?.startsWith('actions/setup-node@'));
-    assert.equal(setupNode.with['package-manager-cache'], false, '必须明确关闭 setup-node 的自动依赖缓存');
-  }
+  const cache = build.steps.find(s => s.uses?.startsWith('actions/cache@'));
+  assert.ok(cache, '构建应恢复 Yarn 下载缓存');
   const install = build.steps.find(s => s.run === 'node scripts/release/ci.cjs install');
-  assert.match(install.env?.YARN_CACHE_FOLDER, /^\$\{\{ runner\.temp \}\}\/[^/]+$/);
-  assert.equal(install.if, undefined, '每次构建都必须执行冻结安装');
+  assert.match(cache.with.path, /^\$\{\{ runner\.temp \}\}\/[^/]+$/);
+  assert.equal(cache.with.path, install.env.YARN_CACHE_FOLDER, '根安装与子包安装必须使用恢复的下载缓存');
+  assert.ok(build.steps.indexOf(cache) < build.steps.indexOf(install));
+  assert.equal(install.if, undefined, '命中缓存也必须执行冻结安装及子包链接');
+  for (const context of ['runner.os', 'runner.arch', 'github.ref_name']) assert.ok(cache.with.key.includes(context), context);
+  assert.ok(cache.with.key.includes("hashFiles('yarn.lock', 'packages/*/yarn.lock')"), '所有根/子包锁文件参与缓存更新');
+  const setup = build.steps.find(s => s.uses?.startsWith('actions/setup-node@'));
+  assert.ok(cache.with.key.includes(`node${setup.with['node-version']}`), 'Node 版本变化必须区分缓存');
+  const tools = build.steps.find(s => s.name === 'Install fixed release tools');
+  const yarnVersion = tools.run.match(/yarn@(\d+\.\d+\.\d+)/)[1];
+  assert.ok(cache.with.key.includes(`yarn${yarnVersion}`), 'Yarn 版本变化必须区分缓存');
+  assert.equal(cache.with['restore-keys'].trim(), cache.with.key.slice(0, cache.with.key.lastIndexOf('${{ hashFiles(\'yarn.lock\'')), '回退仅复用同环境和分支的下载文件');
+  for (const job of Object.values(workflow.jobs)) {
+    const setupNode = job.steps.find(s => s.uses?.startsWith('actions/setup-node@'));
+    assert.equal(setupNode.with['package-manager-cache'], false, '避免隐式启用另一份依赖缓存');
+  }
+  assert.ok(!publish.steps.some(s => s.uses?.startsWith('actions/cache') || s.with?.cache));
   assert.equal(publish.env?.YARN_CACHE_FOLDER, undefined);
   assert.ok(!publish.steps.some(s => s.env?.YARN_CACHE_FOLDER));
 });
