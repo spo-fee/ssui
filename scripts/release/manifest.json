@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
   "branch": "dev-atnd-6.x",
-  "baseSha": "1a8a7e1d0fa7851ba1169983dddbacf4fd02b154",
+  "baseSha": "13d3f089d7e6b2ed67f5edb165423fa94fcfc627",
   "tag": "latest",
   "packages": [
     {
       "name": "assui",
       "path": "packages/assui",
-      "oldVersion": "4.0.1",
-      "version": "4.0.2"
+      "oldVersion": "4.0.2",
+      "version": "4.0.3"
     }
   ]
 }
