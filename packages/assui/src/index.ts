@@ -9,6 +9,8 @@ export type { ButtonDrawerProps } from './button-drawer';
 export { default as ButtonDrawer } from './button-drawer';
 export type { ButtonModalProps } from './button-modal';
 export { default as ButtonModal } from './button-modal';
+export type { CascadingDateSelectProps } from './cascading-date-select';
+export { default as CascadingDateSelect } from './cascading-date-select';
 export type { ColorSelectProps } from './color-select';
 export { default as ColorSelect } from './color-select';
 export type { ComplexValSelectProps } from './complex-val-select';
