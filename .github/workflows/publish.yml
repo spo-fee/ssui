@@ -48,6 +48,23 @@ jobs:
         run: node scripts/release/ci.cjs check
       - name: Install fixed release tools
         run: npm install --global npm@11.16.0 yarn@1.22.22 --ignore-scripts
+      - name: Restore Yarn download cache
+        id: yarn-cache
+        uses: actions/cache@cdf6c1fa76f9f475f3d7449005a359c84ca0f306 # v5.0.3
+        with:
+          path: ${{ runner.temp }}/ssui-yarn-cache
+          key: yarn-download-v1-${{ runner.os }}-${{ runner.arch }}-node24.18.1-yarn1.22.22-${{ github.ref_name }}-${{ hashFiles('**/.yarnrc', '**/.npmrc', 'lerna.json', 'scripts/release/ci.cjs') }}-${{ hashFiles('yarn.lock', 'packages/*/yarn.lock') }}
+          restore-keys: |
+            yarn-download-v1-${{ runner.os }}-${{ runner.arch }}-node24.18.1-yarn1.22.22-${{ github.ref_name }}-${{ hashFiles('**/.yarnrc', '**/.npmrc', 'lerna.json', 'scripts/release/ci.cjs') }}-
+      - name: Report Yarn download cache
+        run: |
+          if [ "$CACHE_HIT" = 'true' ]; then
+            echo 'Yarn 下载缓存：精确命中；仍执行冻结安装。' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Yarn 下载缓存：未精确命中；可能复用同环境旧下载文件，缺失依赖正常下载。具体恢复结果见缓存步骤日志。' >> "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          CACHE_HIT: ${{ steps.yarn-cache.outputs.cache-hit }}
       - name: Install frozen dependencies and link packages
         run: node scripts/release/ci.cjs install
         env:
