@@ -20,3 +20,7 @@ antd 6 升级后仍使用 Moment 日期值，`value`、`defaultValue` 和 `onCha
 ### 1.1. 基础使用
 
 <code hideActions='["CSB", "EXTERNAL"]' src="./demo/index.tsx" ></code>
+
+### 1.2. RTL 布局
+
+<code hideActions='["CSB", "EXTERNAL"]' src="./demo/RTL.tsx" ></code>
