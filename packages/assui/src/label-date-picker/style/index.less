@@ -15,8 +15,7 @@
 
   .@{ant-prefix}-picker {
     height: 45px;
-    padding-right: 15px;
-    padding-left: 15px;
+    padding-inline: 15px;
     border: 1px solid @color_e5e5e5;
     border-radius: @border-radius-base;
     outline: none;
@@ -40,7 +39,7 @@
   &-text {
     position: absolute;
     top: 12px;
-    left: 16px;
+    inset-inline-start: 16px;
     z-index: 2;
     height: 20px;
     color: @color_9aa5b5;
@@ -49,6 +48,11 @@
     transform-origin: top left;
     cursor: pointer;
     transition: all 0.2s ease-out;
+  }
+
+  .@{ant-prefix}-picker-rtl + .label-date-picker-text {
+    direction: rtl;
+    transform-origin: top right;
   }
 
   &-label-scale {
