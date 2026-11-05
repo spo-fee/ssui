@@ -1,26 +1,26 @@
 {
   "schemaVersion": 1,
   "branch": "dev",
-  "baseSha": "1afc962083a0238d512b504081fdcad0082ba795",
+  "baseSha": "8443f8aeb4f5663b9d8d7b6dd77d866f4177475c",
   "tag": "latest",
   "packages": [
     {
       "name": "a-icons",
       "path": "packages/a-icons",
-      "oldVersion": "1.2.87",
-      "version": "1.2.88"
+      "oldVersion": "1.2.88",
+      "version": "1.2.89"
     },
     {
       "name": "amssui",
       "path": "packages/amssui",
-      "oldVersion": "2.0.88",
-      "version": "2.0.89"
+      "oldVersion": "2.0.89",
+      "version": "2.0.90"
     },
     {
       "name": "assui",
       "path": "packages/assui",
-      "oldVersion": "3.3.34",
-      "version": "3.3.35"
+      "oldVersion": "3.3.35",
+      "version": "3.3.36"
     }
   ]
 }
