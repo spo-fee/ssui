@@ -10,6 +10,7 @@ export { default as heic2Jpeg } from './heic2Jpeg';
 export { default as html2canvas } from './html2canvas';
 export { default as htmlToPdf } from './htmlToPdf';
 export { default as intervalExecution } from './intervalExecution';
+export { default as isolateLtrText } from './isolateLtrText';
 export * as keyCode from './keyCode';
 export { default as localStorage } from './localStorage';
 export { default as numberUtils } from './numberUtils';
