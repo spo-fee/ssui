@@ -2,6 +2,7 @@ import * as React from 'react';
 import CloseOutlined from 'a-icons/lib/CloseOutlined';
 import isPromise from 'aa-utils/lib/isPromise';
 import useControllableValue from 'ahooks/lib/useControllableValue';
+import useMemoizedFn from 'ahooks/lib/useMemoizedFn';
 import type { ModalProps } from 'antd/lib/modal';
 import Modal from 'antd/lib/modal';
 import isFunction from 'lodash/isFunction';
@@ -30,22 +31,26 @@ const ButtonModal: React.ForwardRefRenderFunction<unknown, ButtonModalProps> = (
 
   const { children, trigger, onOpen, onClose, onOk, onCancel, ...restModalProps } = props;
 
-  const openModal = () => {
+  const openModal = useMemoizedFn(() => {
     setModalVisible(true);
     onOpen?.();
-  };
-
-  const closeModal = () => {
-    setModalVisible(false);
-    onClose?.();
-  };
-
-  const modalActionRef = React.useRef<ModalAction>({
-    open: openModal,
-    close: closeModal,
   });
 
-  React.useImperativeHandle(ref, () => modalActionRef.current);
+  const closeModal = useMemoizedFn(() => {
+    setModalVisible(false);
+    onClose?.();
+  });
+
+  const [modalAction] = React.useState<ModalAction>(() => {
+    return {
+      open: openModal,
+      close: closeModal,
+    };
+  });
+
+  React.useImperativeHandle(ref, () => {
+    return modalAction;
+  }, [modalAction]);
 
   const handleModalOk = async (e: React.MouseEvent<HTMLElement>) => {
     const result = onOk?.(e);
@@ -71,6 +76,15 @@ const ButtonModal: React.ForwardRefRenderFunction<unknown, ButtonModalProps> = (
       });
   }
 
+  let contentNode;
+  if (isFunction(children)) {
+    contentNode = children(modalAction);
+  } else if (typeof children.type === 'string' || children.type === React.Fragment) {
+    contentNode = children;
+  } else {
+    contentNode = React.cloneElement(children, { modalAction });
+  }
+
   return (
     <>
       {triggerNode}
@@ -83,9 +97,7 @@ const ButtonModal: React.ForwardRefRenderFunction<unknown, ButtonModalProps> = (
         closeIcon={<CloseOutlined />}
         {...restModalProps}
       >
-        {isFunction(children)
-          ? children(modalActionRef.current)
-          : React.cloneElement(children, { modalAction: modalActionRef.current })}
+        {contentNode}
       </Modal>
     </>
   );

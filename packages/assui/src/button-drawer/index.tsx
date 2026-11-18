@@ -1,6 +1,7 @@
-import React, { useImperativeHandle, useRef } from 'react';
+import React, { useImperativeHandle, useState } from 'react';
 import CloseOutlined from 'a-icons/lib/CloseOutlined';
 import useControllableValue from 'ahooks/lib/useControllableValue';
+import useMemoizedFn from 'ahooks/lib/useMemoizedFn';
 import type { DrawerProps } from 'antd/lib/drawer';
 import Drawer from 'antd/lib/drawer';
 import classNames from 'classnames';
@@ -27,22 +28,26 @@ const ButtonDrawer: React.ForwardRefRenderFunction<unknown, ButtonDrawerProps> =
   });
   const { children, onOpen, onClose, trigger, title, className, ...restProps } = props;
 
-  const closeDrawer = () => {
+  const closeDrawer = useMemoizedFn(() => {
     setDrawerVisible(false);
     onClose?.();
-  };
-
-  const openDrawer = () => {
-    setDrawerVisible(true);
-    onOpen?.();
-  };
-
-  const actionRef = useRef<DrawerAction>({
-    open: openDrawer,
-    close: closeDrawer,
   });
 
-  useImperativeHandle(ref, () => actionRef.current);
+  const openDrawer = useMemoizedFn(() => {
+    setDrawerVisible(true);
+    onOpen?.();
+  });
+
+  const [drawerAction] = useState<DrawerAction>(() => {
+    return {
+      open: openDrawer,
+      close: closeDrawer,
+    };
+  });
+
+  useImperativeHandle(ref, () => {
+    return drawerAction;
+  }, [drawerAction]);
 
   let triggerNode;
   if (isFunction(trigger)) {
@@ -53,6 +58,15 @@ const ButtonDrawer: React.ForwardRefRenderFunction<unknown, ButtonDrawerProps> =
       React.cloneElement(trigger, {
         onClick: openDrawer,
       });
+  }
+
+  let contentNode;
+  if (isFunction(children)) {
+    contentNode = children(drawerAction);
+  } else if (typeof children.type === 'string' || children.type === React.Fragment) {
+    contentNode = children;
+  } else {
+    contentNode = React.cloneElement(children, { drawerAction });
   }
 
   return (
@@ -67,9 +81,7 @@ const ButtonDrawer: React.ForwardRefRenderFunction<unknown, ButtonDrawerProps> =
         closeIcon={<CloseOutlined />}
         {...restProps}
       >
-        {isFunction(children)
-          ? children(actionRef.current)
-          : React.cloneElement(children, { drawerAction: actionRef.current })}
+        {contentNode}
       </Drawer>
     </>
   );
