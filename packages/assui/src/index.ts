@@ -37,6 +37,8 @@ export type { Chunk, FindChunks, HighlighterProps } from './highlight-words';
 export { default as HighlightWords } from './highlight-words';
 export type { ImgCropProps } from './img-crop';
 export { default as ImgCrop } from './img-crop';
+export type { IsolateLtrTextProps } from './isolate-ltr-text';
+export { default as IsolateLtrText } from './isolate-ltr-text';
 export type { JSONEditorProps } from './json-editor';
 export { default as JsonEditor } from './json-editor';
 export type { KeepTabProps } from './keep-tab';
