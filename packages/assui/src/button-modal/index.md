@@ -34,13 +34,19 @@ group:
 
 
 
+### 1.5. 原生元素与 Fragment
+
+<code hideActions='["CSB", "EXTERNAL"]' src="./demo/NativeChildrenDemo.jsx" ></code>
+
 ## API
 
-| 属性名   | 描述                                        | 类型                 | 默认值 |
-| -------- | ------------------------------------------- | -------------------- | ------ |
-| content  | 弹框的内容, 会content注入: {open, close}的props | `React.ReactElement` | -      |
-| children | 触发弹框显示的`element`                     | `React.ReactElement | (modalAction) => React.ReactElement ` | -      |
-| onOpen   | 打开时候的回调函数                          | `()=> void`          | -      |
-| onClose  | 关闭时候的回调函数                          | `()=> void`          | -      |
+| 属性名 | 描述 | 类型 | 默认值 |
+| ------ | ---- | ---- | ------ |
+| trigger | 触发弹层显示的元素，或接收打开方法的渲染函数 | `React.ReactElement \| (open: () => void) => React.ReactElement` | - |
+| children | 弹层内容，或接收 `modalAction` 的渲染函数 | `React.ReactElement \| (modalAction: ModalAction) => React.ReactElement` | - |
+| onOpen | 打开时候的回调函数 | `() => void` | - |
+| onClose | 关闭时候的回调函数 | `() => void` | - |
+
+`ModalAction` 包含 `open()` 和 `close()` 方法。自定义内容组件会自动收到 `modalAction` 属性；原生 HTML/SVG 元素及 Fragment 原样渲染，不注入 action，也不会递归向内部组件注入。自定义组件向 DOM 透传 props 时，需要自行过滤 `modalAction`。
 
 更多属性请参考 [antd modal](https://ant.design/components/modal-cn/#API)
