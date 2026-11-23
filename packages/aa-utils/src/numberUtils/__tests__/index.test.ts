@@ -22,11 +22,11 @@ describe('numberUtils', () => {
 
   it('formatNumber - useGrouping and usePlus is true should be defined', () => {
     expect(formatNumber(2232323.101, { useGrouping: true, usePlus: true })).toEqual(
-      '+2,232,323.10',
+      '\u2066+2,232,323.10\u2069',
     );
 
     expect(formatNumber(-232323.101, { useGrouping: true, usePlus: true })).toEqual(
-      '-232,323.10',
+      '\u2066-232,323.10\u2069',
     );
   });
 
@@ -57,11 +57,11 @@ describe('numberUtils', () => {
   });
 
   it('formatPercent default options should be defined', () => {
-    expect(formatPercent(0.12343)).toEqual('12.34%');
-    expect(formatPercent(-0.1)).toEqual('-10.00%');
+    expect(formatPercent(0.12343)).toEqual('\u206612.34%\u2069');
+    expect(formatPercent(-0.1)).toEqual('\u2066-10.00%\u2069');
 
-    expect(formatPercent(0.1, { usePlus: true })).toEqual('+10.00%');
-    expect(formatPercent(-0.1, { usePlus: true })).toEqual('-10.00%');
+    expect(formatPercent(0.1, { usePlus: true })).toEqual('\u2066+10.00%\u2069');
+    expect(formatPercent(-0.1, { usePlus: true })).toEqual('\u2066-10.00%\u2069');
   });
 
   it('formatPercent useUnit is false should be defined', () => {
@@ -70,7 +70,9 @@ describe('numberUtils', () => {
 
   it('formatFixedFraction should be defined ', () => {
     expect(formatFixedFraction(2332.2)).toEqual('2332.20000000');
-    expect(formatFixedFraction(-2332.225, { fractionDigits: 4 })).toEqual('-2332.2250');
+    expect(formatFixedFraction(-2332.225, { fractionDigits: 4 })).toEqual(
+      '\u2066-2332.2250\u2069',
+    );
   });
 
   it('isGreaterThan, isGreaterThanOrEqualTo, isLessThan, isLessThanOrEqualTo  should be defined ', () => {

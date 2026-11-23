@@ -1,7 +1,9 @@
 import BigNumber from 'bignumber.js';
 import lodashIsNaN from 'lodash/isNaN';
+import isNil from 'lodash/isNil';
 import isNull from 'lodash/isNull';
 import isUndefined from 'lodash/isUndefined';
+import isolateLtrText from '../isolateLtrText';
 import { HALF_UP, roundingModeMap } from './const/roundingModeMap';
 import { digitLength, float2Fixed, strip } from './numberPrecision';
 import { divide, minus, plus, times } from './numberPrecision/calculateFunc';
@@ -22,6 +24,14 @@ export interface OptionsConfig {
   roundingMode?: RoundingModeConfig;
   minFractionDigits?: number;
   maxFractionDigits?: number;
+  /** 字符串用于默认空值占位；回调接收原始值，返回字符串时占位，undefined 时正常格式化。 */
+  emptyValue?: string | ((value: Value) => string | undefined);
+  /** 展示前缀，不参与计算；命中空值占位时不展示。 */
+  prefix?: string;
+  /** 展示后缀，所需空格由调用方提供；命中空值占位时不展示。 */
+  suffix?: string;
+  /** 不传时自动隔离带正负号或非空后缀的数值；false 关闭，true 强制隔离（含占位）。 */
+  isolateLtr?: boolean;
 }
 
 interface DefaultOptionsConfig extends OptionsConfig {
@@ -48,7 +58,42 @@ const checkValue = (value: any) => {
   return value;
 };
 
+const resolveEmptyValue = (value: Value, emptyValue: OptionsConfig['emptyValue']) => {
+  if (typeof emptyValue === 'function') {
+    return emptyValue(value);
+  }
+
+  return isNil(value) || value === '' ? emptyValue : undefined;
+};
+
+interface FormatDisplayValueProps extends OptionsConfig {
+  /** 内部数值标记；占位不参与自动隔离判断。 */
+  isNumeric?: boolean;
+}
+
+const formatDisplayValue = (
+  value: string,
+  {
+    prefix = '',
+    suffix = '',
+    isolateLtr,
+    isNumeric = false,
+  }: FormatDisplayValueProps = {},
+) => {
+  const displayValue = `${prefix}${value}${suffix}`;
+  // 占位不参与自动判断；只由格式化数值的分支传入 isNumeric。
+  const shouldIsolate =
+    isolateLtr ??
+    (isNumeric && (/^[+-]/.test(value) || /^[+-]$/.test(prefix.trim()) || suffix !== ''));
+  return shouldIsolate ? isolateLtrText(displayValue) : displayValue;
+};
+
 const formatNumber = (value: Value, options?: OptionsConfig): string => {
+  const emptyValue = resolveEmptyValue(value, options?.emptyValue);
+  if (emptyValue !== undefined) {
+    return formatDisplayValue(emptyValue, { isolateLtr: options?.isolateLtr });
+  }
+
   const val = checkValue(value);
   const { useGrouping, minFractionDigits, maxFractionDigits, usePlus, roundingMode } = {
     ...defaultOptions,
@@ -80,10 +125,13 @@ const formatNumber = (value: Value, options?: OptionsConfig): string => {
   );
 
   if (+val > 0 && usePlus) {
-    return `+${formatValue}`;
+    return formatDisplayValue(`+${formatValue}`, {
+      ...options,
+      isNumeric: numberObj.isFinite(),
+    });
   }
 
-  return formatValue;
+  return formatDisplayValue(formatValue, { ...options, isNumeric: numberObj.isFinite() });
 };
 
 export interface FormatFixedFractionOptions
@@ -112,18 +160,24 @@ const defaultPercentOptions = {
 const formatPercent = (value: Value, options?: formatPercentOptions) => {
   const val = checkValue(value);
 
-  const { useUnit, ...restFormatNumberOptions } = {
+  const { useUnit, emptyValue, ...restFormatNumberOptions } = {
     ...defaultPercentOptions,
     ...options,
   };
 
-  const resultValue = times(val, 100);
-  const formatValue = formatNumber(resultValue, restFormatNumberOptions);
-  if (useUnit) {
-    return `${formatValue}%`;
+  // 使用换算前的原始值判断，后续 formatNumber 不再接收判空选项，避免重复调用回调。
+  const emptyDisplayValue = resolveEmptyValue(value, emptyValue);
+  if (emptyDisplayValue !== undefined) {
+    return formatDisplayValue(emptyDisplayValue, {
+      isolateLtr: restFormatNumberOptions.isolateLtr,
+    });
   }
 
-  return formatValue;
+  const resultValue = times(val, 100);
+  return formatNumber(resultValue, {
+    ...restFormatNumberOptions,
+    suffix: `${useUnit ? '%' : ''}${restFormatNumberOptions.suffix ?? ''}`,
+  });
 };
 
 const isGreaterThan = (value: BigNumber.Value, base: BigNumber.Value) => {

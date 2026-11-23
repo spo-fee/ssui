@@ -11,6 +11,45 @@ group:
 ---
 
 # 格式化数字
+
+## 展示选项
+
+在已有 `formatNumber`、`formatFixedFraction`、`formatPercent` 的 options 中增加四项展示能力。精度、舍入、千分位、百分比换算和空值判定保持原规则；默认会对带正负号或非空后缀的数值文本添加 LTR 隔离字符。三个方法仍返回字符串。
+
+### 代码演示
+
+修改“原始数值”查看前缀、后缀及三种格式化方法的组合结果；清空输入对比原有默认结果与空值占位；输入 0 对比默认判空与自定义判空。RTL 表格并列对比三个方法在默认、false、true 下的纯数字、带单位及占位结果，并用转义文本标出不可见隔离字符。
+
+<code hideActions='["CSB", "EXTERNAL"]' src="./demo/DisplayOptionsDemo.tsx"></code>
+
+### 导入与用法
+
+```ts
+import { numberUtils } from 'aa-utils';
+import type { OptionsConfig } from 'aa-utils/es/numberUtils';
+// 也可按路径导入：
+// import numberUtils from 'aa-utils/es/numberUtils';
+
+numberUtils.formatNumber('12.5000'); // '12.50'，保留原有默认精度
+numberUtils.formatNumber(null, { emptyValue: '-', prefix: '余额：', suffix: ' USD' }); // '-'，只展示占位内容
+numberUtils.formatNumber(0, { emptyValue: '-' }); // '0.00'
+numberUtils.formatNumber('12.5', { prefix: '+', suffix: ' USD' }); // '\u2066+12.50 USD\u2069'
+numberUtils.formatFixedFraction('12.5', { fractionDigits: 3, suffix: ' USD' }); // '\u206612.500 USD\u2069'
+numberUtils.formatPercent('0.125', { prefix: '+', suffix: ' /年' }); // '\u2066+12.50% /年\u2069'
+numberUtils.formatNumber('-12.5', { suffix: ' USD', isolateLtr: false }); // '-12.50 USD'
+numberUtils.formatNumber('12.5', { isolateLtr: true }); // '\u206612.50\u2069'
+numberUtils.formatNumber(0, {
+  emptyValue: (value) => {
+    return value === 0 ? '-' : undefined;
+  },
+}); // '-'；非 0 值返回 undefined 后正常格式化
+```
+
+完整参数见下方 [formatNumber 的 options](#format-number-options)。
+
+- 空值占位只展示 `emptyValue`，不拼接前后缀或百分号；`emptyValue` 回调返回 `undefined` 时正常格式化。
+- 隔离后的字符串含不可见字符，仅用于展示；需要关闭时传 `isolateLtr: false`。
+
 ```js
 const = {
   formatNumber, formatPercent, BigNumber, strip,
@@ -39,15 +78,23 @@ const = {
 | --- | --- | --- | --- |
 | value | 需要处理的数字 | `number` \| `string` | - |
 
+<a id="format-number-options"></a>
+
 #### 1.5.2. options
+
+`Value` 为现有数值输入类型 `BigNumber.Value | null | undefined`。`OptionsConfig` 的完整选项如下；`formatFixedFraction` 和 `formatPercent` 的共用选项也在此统一说明。
 
 | 参数 | 说明 | 类型 | 默认值 |
 | --- | --- | --- | --- |
-| useGrouping | 分组分隔符，如千位分隔符或千/万/亿分隔符 | `boolean` | true |
-| usePlus | 正数加入prefix '+' | `boolean` | false |
+| useGrouping | 是否启用千分位分组 | `boolean` | false |
+| usePlus | 正数添加正号 `+`，可与展示前缀 prefix 组合 | `boolean` | false |
 | minFractionDigits | 保留小数位数的最小数目 | `number` | 2 |
 | maxFractionDigits | 保留的小数位数的最大数目 | `number` | 2 |
 | roundingMode | 舍入的方式 |`up \| down \| ceil \| floor \| halfUp \| halfDown \| halfEven \| halfCeil \| halfFloor` | halfUp |
+| emptyValue | 字符串用于 null、undefined、空字符串的占位，0 不视为空值；函数接收原始值，返回字符串（含空串）时占位，返回 undefined 时正常格式化 | `string \| ((value: Value) => string \| undefined)` | 未配置，沿用原规则 |
+| prefix | 展示前缀，空值占位时不展示 | `string` | 空字符串 |
+| suffix | 展示后缀，位于数值及百分号之后，空格由调用方提供；空值占位时不展示 | `string` | 空字符串 |
+| isolateLtr | 不传时自动隔离带正负号或非空后缀（含 %）的数值，纯无符号数字和占位不隔离；false 关闭；true 隔离全部非空结果 | `boolean` | 自动判断 |
 
 > roundingMode说明： 默认值 `halfUp`是四舍五入，其他值：`down`总是向下舍去， `up`总是向上入，其他值可以看bignumber.js api
 
@@ -65,14 +112,11 @@ const = {
 
 #### 2.1.2. options
 
+共用选项见 [formatNumber 的 options](#format-number-options)。小数位使用 `fractionDigits` 控制，不提供 `minFractionDigits`、`maxFractionDigits`。
+
 | 参数 | 说明 | 类型 | 默认值 |
 | --- | --- | --- | --- |
-| useGrouping | 分组分隔符，如千位分隔符或千/万/亿分隔符 | `boolean` | true |
-| usePlus | 正数加入prefix '+' | `boolean` | false |
 | fractionDigits | 保留小数位数的数目 | `number` | 8 |
-| roundingMode | 舍入的方式 |`up \| down \| ceil \| floor \| halfUp \| halfDown \| halfEven \| halfCeil \| halfFloor` | halfUp ||
-
-
 
 ## 3. 百分比(formatPercent)
 <code hideActions='["CSB", "EXTERNAL"]' src="./demo/formatPercent.jsx" ></code>
@@ -89,10 +133,12 @@ const = {
 
 #### 3.1.2. options
 
+共用选项见 [formatNumber 的 options](#format-number-options)，另支持以下百分比选项。
+
 | 参数 | 说明 | 类型 | 默认值 |
 | --- | --- | --- | --- |
 | useUnit | 是否需要百分号 | `boolean` | true |
-更多属性请参考 `formatNumber`
+
 
 ## 4. 数据精度问题
 1. `0.1 + 0.2 = 0.30000000000000004`
@@ -223,4 +269,3 @@ isGreaterThanOrEqualTo(numbers, base)
 | --- | --- | --- | --- |
 | `number \| stirng \| BigNumber.Instance` | 数字 | - | - |
 | `base \| stirng \| BigNumber.Instance` | 被比较的数字 | - | - |
-
