@@ -1,14 +1,20 @@
 {
   "schemaVersion": 1,
   "branch": "dev",
-  "baseSha": "3c032af9b6374a88439ec7fb12be361c4721f148",
+  "baseSha": "fe35e7502d5cfe3075f457dd5bfc8147d7a90be7",
   "tag": "latest",
   "packages": [
     {
+      "name": "aa-utils",
+      "path": "packages/aa-utils",
+      "oldVersion": "2.1.39",
+      "version": "2.1.40"
+    },
+    {
       "name": "assui",
       "path": "packages/assui",
-      "oldVersion": "3.3.36",
-      "version": "3.3.37"
+      "oldVersion": "3.3.37",
+      "version": "3.3.38"
     }
   ]
 }

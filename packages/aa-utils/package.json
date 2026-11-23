@@ -1,6 +1,6 @@
 {
   "name": "aa-utils",
-  "version": "2.1.39",
+  "version": "2.1.40",
   "author": "jason <usochen@gmail.com>",
   "license": "MIT",
   "main": "./lib/index.js",
